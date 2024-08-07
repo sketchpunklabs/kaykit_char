@@ -5,19 +5,14 @@
 [![Ko-Fi](https://img.shields.io/badge/Ko_Fi-donate-orange?style=flat-square&logo=youtube)](https://ko-fi.com/sketchpunk)
 [![Patreon](https://img.shields.io/badge/Patreon-donate-red?style=flat-square&logo=youtube)](https://www.patreon.com/sketchpunk)
 
-### Character Animation Library ###
+### Demo ###
 
-This is the demo repo for the Ossos project. You can view it at:
-
-https://sketchpunklabs.github.io/ossos_demo
-
-The library can be found at:
-https://github.com/sketchpunklabs/ossos/tree/ossos_next
+https://sketchpunklabs.github.io/kaykit_char/
 
 ### Repo Setup ###
 
 ```sh
 git clone --recurse-submodules --depth=1 https://github.com/sketchpunklabs/kaykit_char
 npm install
-npm run start
+npm run dev
 ```
