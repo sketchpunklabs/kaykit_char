@@ -1,1 +1,2 @@
 # kaykit_char
+test
