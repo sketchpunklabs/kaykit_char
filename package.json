@@ -1,0 +1,16 @@
+{
+	"name"			: "kaykit_char",
+	"version"		: "0.0.0.1",
+	"description"	: "Demoing kaykit animation character",
+	"keywords"		: [ "webgl", "threejs", "animation" ],
+	"repository"	: { "url": "https://github.com/sketchpunklabs/kaykit_char.git", "type": "git" },
+	"author"		: { "name": "Sketchpunk", "email": "tmp@tmp.com", "url": "http://tmp" },
+	"license"		: "MIT",
+
+	"devDependencies": {
+		"browser-sync"  : "^2.27.5"
+	},
+	"scripts": {				
+		"dev"  : "browser-sync start --config bs-config.js"
+	}
+}
