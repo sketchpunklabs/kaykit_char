@@ -6,8 +6,6 @@
 import useThreeWebGL2, { THREE, useDarkScene, useVisualDebug } 
                             from './_lib/useThreeWebGL2.js';
 import { GLTFLoader }       from './_thirdparty/GLTFLoader.js';
-
-
 // #endregion
 
 // #region MAIN
@@ -29,19 +27,27 @@ window.addEventListener( 'load', async ()=>{
     const grp  = gltf.scene;
     App.scene.add( grp );
 
-    // const root = grp.children[0];
-    // console.log( 'Quat', root.quaternion.toArray(), 'Scale', root.scale.toArray() );
-    // console.log( 'Root', root );
+    // console.log( grp );
+    // Object3D    : grp.children[0]
+    // SkinnedMesh : grp.children[0].children[0]
+    // Bone        : grp.children[0].children[1]
 
-    // console.log( 'Bone', root.children[1] );
+    const url2  = './_res/anim/kaykit_char_animations.gltf';
+    const gltf2 = await GLTFLoaderAsync( url2 );
+    const ary   = gltf2.animations;
+    // console.log( ary );
 
+    Ref.mixer  = new THREE.AnimationMixer( grp.children[0].children[0] );
+    Ref.action = Ref.mixer.clipAction( ary[23] );
+    Ref.action.play();
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // App.createRenderLoop( onPreRender ).start();
-    App.renderLoop();
+    App.createRenderLoop( onPreRender ).start();
+    // App.renderLoop();
 });
 
 function onPreRender( dt, et ){
+    Ref.mixer.update( dt );
 }
 // #endregion
 
