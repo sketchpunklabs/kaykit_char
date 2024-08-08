@@ -15,7 +15,8 @@ innerHTML	: `
 // INSERT GITHUB CORNER LINK
 document.body.appendChild(Object.assign(document.createElement('style'), {
 innerHTML	: `
-    .github-corner { position: absolute; z-index: 40; top: 0; right: 0; border-bottom: 0; text-decoration: none; }
+    .github-corner { position: absolute; z-index: 40; top: 0; left: 0; border-bottom: 0; text-decoration: none; transform: scaleX(-1); }
+    .github-cornerX { position: absolute; z-index: 40; top: 0; right: 0; border-bottom: 0; text-decoration: none; }
     .github-corner svg { height: 70px; width: 70px; fill:#6e6e6e; color: #3A3A3A;}
 `}));
 

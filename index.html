@@ -6,6 +6,8 @@
 import useThreeWebGL2, { THREE, useDarkScene, useVisualDebug } 
                             from './_lib/useThreeWebGL2.js';
 import { GLTFLoader }       from './_thirdparty/GLTFLoader.js';
+
+import { Pane }             from './_thirdparty/tweakpane-4.0.4.min.js';
 // #endregion
 
 // #region MAIN
@@ -13,7 +15,9 @@ let Debug;
 let App = useDarkScene( useThreeWebGL2() );
 let Ref = {};
 
+
 // https://www.youtube.com/watch?v=T1KNCtAqJ7A
+// https://tweakpane.github.io/docs/getting-started/
 
 window.addEventListener( 'load', async ()=>{
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -21,25 +25,60 @@ window.addEventListener( 'load', async ()=>{
     App.sphericalLook( 45, 20, 5, [ 0, 0.9, 0 ] );
     Debug = await useVisualDebug( App );
 
+    // const PARAMS = {
+    //     factor  : 123,
+    //     title   : 'hello',
+    //     color   : '#ff0055',
+    //     num     : 5,
+    //     theme   : 'dark',
+    // };
+
+    // const pane = new Pane();
+    // pane.addBinding(PARAMS, 'factor');
+    // pane.addBinding(PARAMS, 'title', { label:'titles' } );
+    // pane.addBinding(PARAMS, 'color');
+    // pane.addBinding(PARAMS, 'num').on( 'change', e=>console.log(e.value ) );
+    // pane.addBinding(PARAMS, 'theme', {options: {Dark: 'dark', Light: 'light'}} ).on( 'change', e=>console.log(e) );
+
+    // const f = pane.addFolder({ title: 'Title', expanded: true });
+    // f.addButton( {title: 'Increment', label: 'counter'}).on( 'click', ()=>console.log('click') );
+
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    const url  = './_res/models/mannequin/mannequin.gltf';
-    const gltf = await GLTFLoaderAsync( url );
-    const grp  = gltf.scene;
-    App.scene.add( grp );
+    // const url  = './_res/models/mannequin/mannequin.gltf';
+    // const gltf = await GLTFLoaderAsync( url );
+    // const grp  = gltf.scene;
+    // App.scene.add( grp );
+
+    // const skeleton = new THREE.SkeletonHelper( grp.children[0].children[1] );
+	// skeleton.visible = true;
+	// App.scene.add( skeleton );
+
+
+    // grp.traverse( o=>{
+    //     console.log( o instanceof THREE.SkinnedMesh );
+    // });
 
     // console.log( grp );
     // Object3D    : grp.children[0]
     // SkinnedMesh : grp.children[0].children[0]
     // Bone        : grp.children[0].children[1]
 
-    const url2  = './_res/anim/kaykit_char_animations.gltf';
-    const gltf2 = await GLTFLoaderAsync( url2 );
-    const ary   = gltf2.animations;
-    // console.log( ary );
+    // const url2  = './_res/anim/kaykit_char_animations.gltf';
+    // const gltf2 = await GLTFLoaderAsync( url2 );
+    // const ary   = gltf2.animations;
+    // // console.log( ary );
 
-    Ref.mixer  = new THREE.AnimationMixer( grp.children[0].children[0] );
-    Ref.action = Ref.mixer.clipAction( ary[23] );
-    Ref.action.play();
+    // Ref.mixer  = new THREE.AnimationMixer( grp.children[0].children[0] );
+    // Ref.action = Ref.mixer.clipAction( ary[23] );
+    // Ref.action.play();
+
+    // // ary.forEach( o=>console.log(o.name) );
+    // console.log( ary.length );
+
+    Promise.allSettled([
+        loadCharacter( './_res/models/mannequin/mannequin.gltf' ),
+        loadAnimations( './_res/anim/kaykit_char_animations.gltf' ),
+    ]).then( dataLoaded );
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     App.createRenderLoop( onPreRender ).start();
@@ -47,16 +86,94 @@ window.addEventListener( 'load', async ()=>{
 });
 
 function onPreRender( dt, et ){
-    Ref.mixer.update( dt );
+    if( Ref.mixer ) Ref.mixer.update( dt );
 }
 // #endregion
 
 
+// #region HELPERS
 /** Wrap ThreeJS's GLTFLoader in a promise to use Async/Await functionality */
 function GLTFLoaderAsync( url ){
     return new Promise( ( resolve, reject )=>{
         new GLTFLoader().load( url, resolve, null, reject );
     });
 }
+// #endregion
+
+// #region LOADERS
+async function loadCharacter( url ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const gltf = await GLTFLoaderAsync( url );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Find skinned mesh to animate. Need to add it & its first bone to 
+    // the scene to make it render correctly.
+    let mesh;
+    gltf.scene.traverse( o=>{ if( !mesh && o instanceof THREE.SkinnedMesh ) mesh = o; });
+    App.scene.add( mesh, mesh.skeleton.bones[0] );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Add skeleton viewer
+    const skel   = new THREE.SkeletonHelper( mesh.skeleton.bones[0] );
+	skel.visible = false;
+	App.scene.add( skel );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Ref.char = { mesh, skel };
+}
+
+async function loadAnimations( url ){
+    const gltf = await GLTFLoaderAsync( url );
+    Ref.animations = gltf.animations;
+
+    await buildUI( gltf.animations );
+}
+
+async function dataLoaded( e ){
+    Ref.mixer = new THREE.AnimationMixer( Ref.char.mesh );
+    playAnimation( Ref.animations[0].name );
+}
+// #endregion
+
+// #region UI
+async function buildUI( anim ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Build up data
+    const clipOpt = anim.reduce( (p,c,i)=>{ p[c.name] = c.name; return p; }, {} );
+    const s       = { 
+        clips       : anim[0].name,
+        Skeleton    : false,
+    };
+    
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Build up ui
+    const p = new Pane();
+    const f = p.addFolder({ title: 'Control Panel', expanded: true });
+
+    f   .addBinding( s, 'clips', { label:'Clips', options: clipOpt } )
+        .on( 'change', onAnimationChange );
+
+    f   .addBinding( s, 'Skeleton' ).on( 'change', onSkeleton );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Ref.pane = p;
+}
+
+function onAnimationChange( e ){ playAnimation( e.value ); }
+function onSkeleton( e ){ Ref.char.skel.visible = e.value; }
+
+function playAnimation( id ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const clip = Ref.animations.find( i=>( i.name === id ) );
+    if( !clip ){ console.error( 'Clip not found:', id ); return; }
+    
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const act  = Ref.mixer.clipAction( clip );
+    if( Ref.action ) Ref.action.stop();
+    
+    act.play();
+    Ref.action = act;
+}
+// #endregion
 
 </script></body></html>
