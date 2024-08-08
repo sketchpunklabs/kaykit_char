@@ -7,14 +7,32 @@ import useThreeWebGL2, { THREE, useDarkScene, useVisualDebug }
                             from './_lib/useThreeWebGL2.js';
 import { GLTFLoader }       from './_thirdparty/GLTFLoader.js';
 
-import { Pane }             from './_thirdparty/tweakpane-4.0.4.min.js';
+import { Pane }                 from './_thirdparty/tweakpane-4.0.4.min.js';
+import * as TweakpaneEssentials from './_thirdparty/tweakpane-plugin-essentials-0.2.1.min.js';
+
+import useTransformControl  from './_lib/useTransformControl.js';
 // #endregion
 
 // #region MAIN
 let Debug;
 let App = useDarkScene( useThreeWebGL2() );
-let Ref = {};
+let Ref = {
+    pause  : false,
+    gizmo  : useTransformControl( App ),
+    action : null,
+    char   : { mesh: null, skel:null, handl:null, handr:null, head:null },
+    props  : {
+        Shield              : { mesh:null, pos:[-0.1,0,0.05], rot:[0,Math.PI * -0.5,0] },
+        Axe_2handed         : { mesh:null, pos:[-0.022537977402425205, 0.14825856797100856, 0.035714842191911636], quat:[0.24249606553513545, -0.3183588941038431, 0.01461333299132493, 0.9163131141939649]  },
+        Crossbow_1handed    : { mesh:null, pos:[-0.10687772450783956, 0.049749252628277, 0.01802268378453304], quat:[0, -0.5147333453308135, 0, 0.857350326998567] },
+        Crossbow_2handed    : { mesh:null, pos:[-0.055489156674837635, 0.07315769473973252, -0.0036172203874524833], quat:[-0.0022801307010711642, -0.5110644303109522, 0.0001895087240134682, 0.8595393610308788] },
+        Mug_empty           : { mesh:null, pos:[-0.30155191381336904, -0.004978531268737184, -0.03889880826609325] },
+        Chair               : { mesh:null, pos:[0.006739486923674987, -0.0485037582431323, -0.5772039579972961], quat:[0, 0.7029668210948672, 0, 0.7112226433682894] },
+    },
+};
 
+Ref.gizmo.onMove    = v=>{ console.log( 'Pos', v ) };
+Ref.gizmo.onRotate  = v=>{ console.log( 'Rot', v ) };
 
 // https://www.youtube.com/watch?v=T1KNCtAqJ7A
 // https://tweakpane.github.io/docs/getting-started/
@@ -22,7 +40,7 @@ let Ref = {};
 window.addEventListener( 'load', async ()=>{
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Setup
-    App.sphericalLook( 45, 20, 5, [ 0, 0.9, 0 ] );
+    App.sphericalLook( 0, 20, 4, [ 0, 0.9, 0 ] );
     Debug = await useVisualDebug( App );
 
     // const PARAMS = {
@@ -78,6 +96,7 @@ window.addEventListener( 'load', async ()=>{
     Promise.allSettled([
         loadCharacter( './_res/models/mannequin/mannequin.gltf' ),
         loadAnimations( './_res/anim/kaykit_char_animations.gltf' ),
+        loadProps(),
     ]).then( dataLoaded );
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -86,7 +105,7 @@ window.addEventListener( 'load', async ()=>{
 });
 
 function onPreRender( dt, et ){
-    if( Ref.mixer ) Ref.mixer.update( dt );
+    if( Ref.mixer && !Ref.pause ) Ref.mixer.update( dt );
 }
 // #endregion
 
@@ -97,6 +116,42 @@ function GLTFLoaderAsync( url ){
     return new Promise( ( resolve, reject )=>{
         new GLTFLoader().load( url, resolve, null, reject );
     });
+}
+
+function wsAlignSocket( bone, toUp=[0,0,1], toFwd=[0,-1,0], toPos=[0.0, 0.1, 0.0] ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Data & Worldspace rotation of bone
+    const vUP  = new THREE.Vector3().fromArray( toUp );
+    const vFWD = new THREE.Vector3().fromArray( toFwd );
+    const rot  = new THREE.Quaternion();
+    bone.getWorldQuaternion( rot );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Compute Swing Rotation
+    const v = new THREE.Vector3( 0, 1, 0 );
+    v.applyQuaternion( rot );                   // Compute UP Vector for bone
+
+    const swing = new THREE.Quaternion();
+    swing   .setFromUnitVectors( v, vUP )       // Rotation between current & target vectors
+            .multiply( rot )                    // PreMul to current rotation
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Compute Twist Rotation
+    v.set( 0, 0, 1 ).applyQuaternion( swing );  // Compute FORWARD Vector for bone
+
+    const twist = new THREE.Quaternion();
+    twist   .setFromUnitVectors( v, vFWD )      // Rotation between current & target vectors
+            .multiply( swing );                 // PreMul to swing rotation
+    
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Update Rotating
+    twist.premultiply( rot.invert() );          // to Local space
+
+    const socket = new THREE.Group();
+    socket.quaternion.copy( twist );            // Save LS to socket's offset
+    socket.position.fromArray( toPos );         // Copy position offset
+
+    return socket;
 }
 // #endregion
 
@@ -111,15 +166,35 @@ async function loadCharacter( url ){
     let mesh;
     gltf.scene.traverse( o=>{ if( !mesh && o instanceof THREE.SkinnedMesh ) mesh = o; });
     App.scene.add( mesh, mesh.skeleton.bones[0] );
+    Ref.char.mesh = mesh;
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Add skeleton viewer
     const skel   = new THREE.SkeletonHelper( mesh.skeleton.bones[0] );
 	skel.visible = false;
 	App.scene.add( skel );
+    Ref.char.skel = skel;
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Ref.char = { mesh, skel };
+    // Find bones to place props
+    for( const b of mesh.skeleton.bones ){
+        switch( b.name ){
+            // ------------------------
+            case 'handl' :{
+                Ref.char.handl = wsAlignSocket( b, [0,0,1], [0,1,0] );
+                b.add( Ref.char.handl );
+                
+                break; }
+            // ------------------------
+            case 'handr' :{
+                Ref.char.handr = wsAlignSocket( b, [0,0,1], [0,-1,0] );
+                b.add( Ref.char.handr );
+                
+                break; }
+            // ------------------------
+            case 'head'  : Ref.char.head  = b; break;
+        }
+    }
 }
 
 async function loadAnimations( url ){
@@ -129,9 +204,43 @@ async function loadAnimations( url ){
     await buildUI( gltf.animations );
 }
 
+async function loadProps(){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const ary = await Promise.allSettled([
+        GLTFLoaderAsync( './_res/models/pete/pete_gear.gltf' ),
+        GLTFLoaderAsync( './_res/models/props/random_props.gltf' ),
+    ]);
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Save references for prop meshes
+    ary.forEach( i=>{
+        i.value.scene.traverse( o=>{
+            if( !o.isMesh ) return;
+
+            const n = o.name;
+            if( Ref.props[ n ] ){
+                // PreExisting object means custom transform is needed
+                const p = Ref.props[ n ];
+                if( p.pos )  o.position.fromArray( p.pos );
+                if( p.rot )  o.rotation.fromArray( p.rot );
+                if( p.quat ) o.quaternion.fromArray( p.quat );
+                p.mesh = o;
+            }else{
+                // Render mesh as is
+                Ref.props[ n ] = { mesh:o };
+            }
+        });
+    });
+}
+
 async function dataLoaded( e ){
     Ref.mixer = new THREE.AnimationMixer( Ref.char.mesh );
     playAnimation( Ref.animations[0].name );
+    // playAnimation( 'Block' );
+
+    // Ref.char.handr.add( Ref.props.Skeleton_Staff.mesh );
+    // App.scene.add( Ref.props.Chair.mesh );
+    // Ref.gizmo.attach( Ref.props.Skeleton_Staff.mesh );
 }
 // #endregion
 
@@ -148,12 +257,32 @@ async function buildUI( anim ){
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Build up ui
     const p = new Pane();
+    p.registerPlugin( TweakpaneEssentials );
+
     const f = p.addFolder({ title: 'Control Panel', expanded: true });
 
     f   .addBinding( s, 'clips', { label:'Clips', options: clipOpt } )
         .on( 'change', onAnimationChange );
 
+    f   .addBlade({ view: 'buttongrid', size: [3, 1], label: '',
+            cells: (x, y) => ({ title: [ ['Start', 'Pause', 'Stop'] ][y][x] }),
+        }).on('click', (ev) => {
+            switch( ev.index[0] ){
+                case 0: Ref.action.play(); Ref.pause = false; break;
+                case 1: Ref.pause = true; break;
+                case 2: Ref.action.stop(); Ref.pause = false; break;
+            }
+        });
+
     f   .addBinding( s, 'Skeleton' ).on( 'change', onSkeleton );
+
+    const d = p.addFolder({ title: 'Debug', expanded: false });
+    d.addButton({ title: 'Top View' }).on( 'click', ()=>App.sphericalLook( 0, 90, 5 ) );
+    d.addButton({ title: 'Right View' }).on( 'click', ()=>App.sphericalLook( 90, 0, 4 ) );
+    d.addButton({ title: 'Front View' }).on( 'click', ()=>App.sphericalLook( 0, 0, 4 ) );
+
+    d.addButton({ title: 'Rotate' }).on( 'click', ()=>Ref.gizmo.toRotate() );
+    d.addButton({ title: 'Translate' }).on( 'click', ()=>Ref.gizmo.toTranslate() );
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     Ref.pane = p;
@@ -173,6 +302,75 @@ function playAnimation( id ){
     
     act.play();
     Ref.action = act;
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    showClipProps( clip.name );
+}
+
+function showClipProps( id ){
+    console.log( 'props', id );
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Hide all props
+    // TODO - Find better way to sync or swop active props
+    for( const p of Object.values( Ref.props ) ) p.mesh.visible = false;
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if( id.includes( '1H_Melee' ) ){
+        toRightHand( Ref.props.Sword );
+    
+    }else if( id.includes( '2H_Melee' ) ){
+        toRightHand( Ref.props.Axe_2handed );
+
+    }else if( id.includes( 'Spellcast' ) ){
+        toRightHand( Ref.props.Skeleton_Staff );
+
+    // --------------------------------
+    }else if( id.includes( '1H_Ranged' ) ){
+        toRightHand( Ref.props.Crossbow_1handed );
+
+    }else if( id.includes( '2H_Ranged' ) ){
+        toRightHand( Ref.props.Crossbow_2handed );
+
+    // --------------------------------
+    }else if( id.includes( 'Block' ) ){
+        toRightHand( Ref.props.Sword );
+        toLeftHand( Ref.props.Shield );
+
+    // --------------------------------
+    }else if( id.includes( 'Dualwield' ) ){
+        toRightHand( Ref.props.Sword );
+        toLeftHand( Ref.props.Axe_1handed );
+
+    }else if( id.includes( 'Use_Item' ) || id.includes( 'Throw' ) ){
+        toRightHand( Ref.props.Mug_empty );
+
+    }else if( id.includes( 'Chair' ) ){
+        toScene( Ref.props.Chair );
+
+    // --------------------------------
+    }else if( id.includes( 'Jump' ) ){
+        toHead( Ref.props.Helmet );
+    }
+}
+
+function toRightHand( prop ){
+    prop.mesh.visible = true;
+    Ref.char.handr.add( prop.mesh );
+}
+
+function toLeftHand( prop ){
+    prop.mesh.visible = true;
+    Ref.char.handl.add( prop.mesh );
+}
+
+function toHead( prop ){
+    prop.mesh.visible = true;
+    Ref.char.head.add( prop.mesh );
+}
+
+function toScene( prop ){
+    prop.mesh.visible = true;
+    App.scene.add( prop.mesh );
 }
 // #endregion
 
