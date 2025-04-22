@@ -1,0 +1,201 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title></title></head>
+<style>canvas{ display:block; } body, html { padding:0px; margin:0px; width:100%; height:100%; }</style>
+<body><script src="./import-map.js"></script><script type="module">
+// #region IMPORTS
+import useThreeWebGL2, { THREE, useDarkScene, useVisualDebug } 
+                            from './_lib/useThreeWebGL2.js';
+import { GLTFLoader }       from './_thirdparty/GLTFLoader.js';
+// #endregion
+
+// #region MAIN
+let Debug;
+let App = useDarkScene( useThreeWebGL2() );
+let Ref = {};
+
+window.addEventListener( 'load', async ()=>{
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup
+    App.sphericalLook( 45, 20, 4, [ 0, 0.9, 0 ] );
+    Debug = await useVisualDebug( App );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Promise.allSettled([
+        loadCharacter( './_res/models/mannequin/mannequin.gltf' ),
+        loadAnimations( './_res/anim/kaykit_char_animations.gltf' ),
+    ])
+        .then( onReady )
+        .then( queueAnimations );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.createRenderLoop( onPreRender ).start();
+    // App.renderLoop();
+});
+
+function onPreRender( dt, et ){
+    if( Ref.mixer && !Ref.pause ) Ref.mixer.update( dt );
+}
+// #endregion
+
+
+// #region LOADERS
+/** Wrap ThreeJS's GLTFLoader in a promise to use Async/Await functionality */
+function GLTFLoaderAsync( url ){
+    return new Promise( ( resolve, reject )=>{
+        new GLTFLoader().load( url, resolve, null, reject );
+    });
+}
+
+async function loadCharacter( url ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const gltf = await GLTFLoaderAsync( url );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Find skinned mesh to animate. Need to add it & its first bone to 
+    // the scene to make it render correctly.
+    let mesh;
+    gltf.scene.traverse( o=>{ if( !mesh && o instanceof THREE.SkinnedMesh ) mesh = o; });
+    // App.scene.add( mesh, mesh.skeleton.bones[0] );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Add skeleton viewer
+    const skel   = new THREE.SkeletonHelper( mesh.skeleton.bones[0] );
+    // App.scene.add( skel );
+
+    return {
+        rootBone: mesh.skeleton.bones[0],
+        mesh,
+        skel,
+    };
+}
+
+async function loadAnimations( url ){
+    const gltf = await GLTFLoaderAsync( url );
+    return gltf.animations;
+}
+// #endregion
+
+async function onReady( ary ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup character
+    const char = ary[0].value;
+    App.scene.add( ...Object.values( char ) );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup Animations
+    Ref.clips = ary[1].value;
+    Ref.mixer = new THREE.AnimationMixer( char.mesh );
+}
+
+async function queueAnimations(){
+    const mix   = Ref.mixer;
+    const names = [ 'Idle', 'Idle_B', 'Lie_Idle', 'Taunt_Longer', 'Spellcast_Summon' ];
+    
+    const clips = Ref.clips.filter( i=>names.includes( i.name ) );
+;
+
+    Ref.queue = new AnimationQueue( mix )
+        // .addClip( clips[0] )
+        .addClips( clips )
+        .playNext();
+}
+
+class AnimationQueue{
+    // #region MAIN
+    mixer   = null;
+    action  = null;
+    clips   = [];
+    #idx    = -1;
+    constructor( mixer ){
+        this.mixer = mixer;
+        this.mixer.addEventListener( 'finished', this.onAnimationFinished );
+    }
+    // #endregion
+
+    // #region METHODS
+    addClip( c ){ this.clips.push( c ); return this; }
+    addClips( ary ){ this.clips.push( ...ary ); return this; }
+
+    clearAll(){
+        this.mixer.stopAllAction();
+        
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Stop all actions and remove from mixer
+        let act;
+        for( let c of this.clips ){
+            // ----------------------------
+            act = this.mixer.existingAction( c );
+            if( act ){
+                // act.stop();
+                this.mixer.uncacheAction( c );
+            }
+
+            // ----------------------------
+            this.mixer.uncacheClip( c );
+        }   
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Final Cleanup
+        this.#idx           = -1;
+        this.action         = null;
+        this.clips.length   = 0;
+    }
+    
+    dispose(){
+        this.stop().clearAll();
+        this.mixer = null;
+    }
+    // #endregion
+
+    // #region PLAYBACK METHODS
+    playNext(){
+        // Move to next index in a loop
+        this.#idx = ( this.#idx + 1 ) % this.clips.length;
+
+        // Stop any action that may be running
+        if( this.action ) this.action.stop();
+
+        // Get or create action for next clip
+        let act = this.mixer.existingAction( this.clips[ this.#idx ] );
+        if( !act ){
+            act                     = this.mixer.clipAction( this.clips[ this.#idx ] );
+            act.loop                = THREE.LoopOnce;   // Only play once
+            act.clampWhenFinished   = true;             // Hold last frame
+        }
+
+        // console.log( 'Play', this.#idx, this.clips[ this.#idx ].name );
+
+        // Play action
+        this.action = act;
+        this.action.reset().play();
+        return this;
+    }
+
+    play(){
+        if( this.action )   this.action.play();
+        else                this.playNext();
+        return this;
+    }
+
+    pause(){
+        this.action?.pause();
+        return this;
+    }
+
+    stop(){
+        if( this.action ){
+            this.action.stop();
+            this.action = null;
+        }
+        this.#idx = -1;
+        return this;
+    }
+    // #endregion
+
+    // #region EVENT HANDLERS
+    onAnimationFinished = e=>{
+        if( this.clips.length > 0 ) this.playNext();
+    };
+    // #endregion
+}
+
+</script></body></html>
