@@ -27,7 +27,8 @@ window.addEventListener( 'load', async ()=>{
         // .then( testSimpleWeightMix )
         // .then( testStopping )
         // .then( testTimeoutCrossfade )
-        .then( testIntervalCrossfade )
+        // .then( testIntervalCrossfade )
+        .then( testIntervalCrossfadeRoot )
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     App.createRenderLoop( onPreRender ).start();
@@ -80,13 +81,13 @@ async function loadAnimations( url ){
 async function onReady( ary ){
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Setup character
-    const char = ary[0].value;
-    App.scene.add( ...Object.values( char ) );
+    Ref.char = ary[0].value;
+    App.scene.add( ...Object.values( Ref.char ) );
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Setup Animations
     Ref.clips = ary[1].value;
-    Ref.mixer = new THREE.AnimationMixer( char.mesh );
+    Ref.mixer = new THREE.AnimationMixer( Ref.char.mesh );
 }
 
 // Play with Weight values
@@ -159,6 +160,47 @@ async function testIntervalCrossfade(){
 
     const anim1                 = Ref.clips.find( i=>i.name === 'Spellcast_Summon' );
     const action1               = Ref.mixer.clipAction( anim1 );
+    action1.loop                = THREE.LoopRepeat;
+    action1.clampWhenFinished   = true;
+
+    const ary = [action0, action1];
+    let   idx = 0;
+
+    setInterval( ()=>{
+        console.log( 'TICK' );
+        const ni   = ( idx + 1 ) % ary.length;
+        const from = ary[ idx ];
+        const to   = ary[ ni ];
+
+        from.setEffectiveWeight( 1 );       // PingPong without it 
+        from.setEffectiveTimeScale( 1 );    // PingPong without it 
+        from.enabled = true;                // PingPong without it
+
+        to.setEffectiveWeight( 1 );         // PingPong without it
+        to.setEffectiveTimeScale( 1 );      // PingPong without it
+        to.time     = 0;                    // PingPong without it
+        to.enabled  = true;                 // NEEDED after first crossfade, else get TPOSE
+        to.play();                          // NEEDED for all crossfades, else get TPOSE
+
+        from.crossFadeTo( to, 1, false );
+
+        idx = ni;
+    }, 4000 );
+}
+
+async function testIntervalCrossfadeRoot(){
+    const mixer                 = new THREE.AnimationMixer( new THREE.Object3D() );
+    const root                  = Ref.char.mesh;
+    Ref.mixer = mixer;
+
+    const anim0                 = Ref.clips.find( i=>i.name === 'Idle' );
+    const action0               = mixer.clipAction( anim0, root );
+    action0.loop                = THREE.LoopRepeat;
+    action0.clampWhenFinished   = true;
+    action0.play();
+
+    const anim1                 = Ref.clips.find( i=>i.name === 'Spellcast_Summon' );
+    const action1               = mixer.clipAction( anim1, root );
     action1.loop                = THREE.LoopRepeat;
     action1.clampWhenFinished   = true;
 
