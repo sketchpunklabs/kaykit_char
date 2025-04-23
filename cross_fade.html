@@ -1,0 +1,196 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title></title></head>
+<style>canvas{ display:block; } body, html { padding:0px; margin:0px; width:100%; height:100%; }</style>
+<body><script src="./import-map.js"></script><script type="module">
+// #region IMPORTS
+import useThreeWebGL2, { THREE, useDarkScene, useVisualDebug } 
+                            from './_lib/useThreeWebGL2.js';
+import { GLTFLoader }       from './_thirdparty/GLTFLoader.js';
+// #endregion
+
+// #region MAIN
+let Debug;
+let App = useDarkScene( useThreeWebGL2() );
+let Ref = {};
+
+window.addEventListener( 'load', async ()=>{
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup
+    App.sphericalLook( 45, 20, 4, [ 0, 0.9, 0 ] );
+    Debug = await useVisualDebug( App );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Promise.allSettled([
+        loadCharacter( './_res/models/mannequin/mannequin.gltf' ),
+        loadAnimations( './_res/anim/kaykit_char_animations.gltf' ),
+    ])
+        .then( onReady )
+        // .then( testSimpleWeightMix )
+        // .then( testStopping )
+        // .then( testTimeoutCrossfade )
+        .then( testIntervalCrossfade )
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    App.createRenderLoop( onPreRender ).start();
+    // App.renderLoop();
+});
+
+function onPreRender( dt, et ){
+    if( Ref.mixer && !Ref.pause ) Ref.mixer.update( dt );
+}
+// #endregion
+
+
+// #region LOADERS
+/** Wrap ThreeJS's GLTFLoader in a promise to use Async/Await functionality */
+function GLTFLoaderAsync( url ){
+    return new Promise( ( resolve, reject )=>{
+        new GLTFLoader().load( url, resolve, null, reject );
+    });
+}
+
+async function loadCharacter( url ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const gltf = await GLTFLoaderAsync( url );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Find skinned mesh to animate. Need to add it & its first bone to 
+    // the scene to make it render correctly.
+    let mesh;
+    gltf.scene.traverse( o=>{ if( !mesh && o instanceof THREE.SkinnedMesh ) mesh = o; });
+    // App.scene.add( mesh, mesh.skeleton.bones[0] );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Add skeleton viewer
+    const skel   = new THREE.SkeletonHelper( mesh.skeleton.bones[0] );
+    // App.scene.add( skel );
+
+    return {
+        rootBone: mesh.skeleton.bones[0],
+        mesh,
+        skel,
+    };
+}
+
+async function loadAnimations( url ){
+    const gltf = await GLTFLoaderAsync( url );
+    return gltf.animations;
+}
+// #endregion
+
+async function onReady( ary ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup character
+    const char = ary[0].value;
+    App.scene.add( ...Object.values( char ) );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Setup Animations
+    Ref.clips = ary[1].value;
+    Ref.mixer = new THREE.AnimationMixer( char.mesh );
+}
+
+// Play with Weight values
+async function testSimpleWeightMix(){
+    const anim0                 = Ref.clips.find( i=>i.name === 'Idle' );
+    const action0               = Ref.mixer.clipAction( anim0 );
+    action0.loop                = THREE.LoopRepeat; //THREE.LoopOnce;
+    action0.clampWhenFinished   = true;
+    action0.play();
+    action0.weight = 0.8;
+
+    const anim1                 = Ref.clips.find( i=>i.name === 'Spellcast_Summon' );
+    const action1               = Ref.mixer.clipAction( anim1 );
+    action1.loop                = THREE.LoopRepeat; //THREE.LoopOnce;
+    action1.clampWhenFinished   = true;
+    action1.play();
+    action1.weight = 0.2;
+}
+
+// What happens when stopping animation
+async function testStopping(){
+    const anim0                 = Ref.clips.find( i=>i.name === 'Idle' );
+    const action0               = Ref.mixer.clipAction( anim0 );
+    action0.loop                = THREE.LoopRepeat;
+    action0.clampWhenFinished   = true;
+    action0.play();
+
+    setTimeout( ()=>{
+        console.log( 'TICK' );
+        // action0.stop();  // Causes TPose
+        // action0.paused = true;  // No TPose
+        action0.timeScale = 0; // No TPose
+    }, 2000 );
+}
+
+
+async function testTimeoutCrossfade(){
+    const anim0                 = Ref.clips.find( i=>i.name === 'Idle' );
+    const action0               = Ref.mixer.clipAction( anim0 );
+    action0.loop                = THREE.LoopRepeat;
+    // action0.clampWhenFinished   = true;
+    action0.play();
+
+    setTimeout( ()=>{
+        const anim1                 = Ref.clips.find( i=>i.name === 'Spellcast_Summon' );
+        const action1               = Ref.mixer.clipAction( anim1 );
+        action1.loop                = THREE.LoopRepeat; //THREE.LoopOnce;
+        // action1.clampWhenFinished   = true;
+
+        // action0.setEffectiveWeight( 1 );
+        // action1.setEffectiveWeight( 1 );
+        // action0.weight = 1;
+        // action1.weight = 1;
+
+        action1.crossFadeFrom( action0, 1, false ).play();
+    }, 2000 );
+}
+
+
+// https://www.reddit.com/r/threejs/comments/1cvd7mu/clarification_on_the_effect_of_crossfade_and_fade/
+// https://threejs.org/docs/index.html#api/en/animation/AnimationAction.crossFadeFrom
+// https://threejs.org/docs/index.html#api/en/animation/AnimationAction.crossFadeTo
+// https://github.com/mrdoob/three.js/blob/dev/examples/webgl_animation_skinning_blending.html#L407
+async function testIntervalCrossfade(){
+    const anim0                 = Ref.clips.find( i=>i.name === 'Idle' );
+    const action0               = Ref.mixer.clipAction( anim0 );
+    action0.loop                = THREE.LoopRepeat;
+    action0.clampWhenFinished   = true;
+    action0.play();
+
+    const anim1                 = Ref.clips.find( i=>i.name === 'Spellcast_Summon' );
+    const action1               = Ref.mixer.clipAction( anim1 );
+    action1.loop                = THREE.LoopRepeat;
+    action1.clampWhenFinished   = true;
+
+    const ary = [action0, action1];
+    let   idx = 0;
+
+    setInterval( ()=>{
+        console.log( 'TICK' );
+        const ni   = ( idx + 1 ) % ary.length;
+        const from = ary[ idx ];
+        const to   = ary[ ni ];
+
+        from.setEffectiveWeight( 1 );       // PingPong without it 
+        from.setEffectiveTimeScale( 1 );    // PingPong without it 
+        from.enabled = true;                // PingPong without it
+
+        to.setEffectiveWeight( 1 );         // PingPong without it
+        to.setEffectiveTimeScale( 1 );      // PingPong without it
+        to.time     = 0;                    // PingPong without it
+        to.enabled  = true;                 // NEEDED after first crossfade, else get TPOSE
+        to.play();                          // NEEDED for all crossfades, else get TPOSE
+
+        from.crossFadeTo( to, 1, false );
+
+        idx = ni;
+    }, 4000 );
+}
+
+// console.log( 
+//     from.getClip().name, from.weight, from.getEffectiveWeight(), from.time, from.timeScale, from.getEffectiveTimeScale(),
+//     ' > ', 
+//     to.getClip().name, to.weight, to.getEffectiveWeight(), to.time, to.timeScale, to.getEffectiveTimeScale(),
+// );
+
+</script></body></html>
