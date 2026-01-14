@@ -129,7 +129,7 @@ effect( ()=>{
         });
     }
 
-    console.log( 'PackSel', pIdx, 'clipSel', pack.clips.ref.length );
+    // console.log( 'PackSel', pIdx, 'clipSel', pack.clips.ref.length );
 });
 
 // FACE : Change Face Render
@@ -421,14 +421,14 @@ render( html`<${UI}/>`, document.querySelector('#ui') );
                 case 'scene'    : App.scene.add( m );
             }
 
-            console.log( 'added', i );
+            // console.log( 'added', i );
             rtn.push( m );
             Ref.queue.enqueue( PopMeshTask.show( m, 1.5, Ref.ease ) );
         });
 
         compare.missing.forEach( i=>{
             const m = Store.props[ i ].mesh;
-            console.log( 'missing', i );
+            // console.log( 'missing', i );
             Ref.queue.enqueue( PopMeshTask.hide( m, 1.5, Easing.expOut ) );
         });
 
