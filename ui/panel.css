@@ -1,0 +1,172 @@
+/* #region PANEL */
+.floatPanel {
+    display             : flex;
+    flex-direction      : column;
+    position            : fixed;
+    max-height          : calc(100vh - 100px);
+
+    background-color    : rgba(30, 30, 36, 0.85);
+    border              : 1px solid #4a4a5a54;
+    border-radius       : 4px;
+    box-shadow          : 0 0px 5px rgba(0, 0, 0, 0.5);
+    padding             : 5px;
+
+    font-family : "lucida console";
+    font-size   : 14px;
+    color       : white;
+
+    overflow-y              : auto;
+    overflow-x              : hidden;
+    scrollbar-color         : hsla(0,0%,100%,.15) transparent;
+    scrollbar-width         : thin;
+    scroll-behavior         : smooth;
+    overscroll-behavior-y   : contain;
+}
+
+.floatPanel.topLeft {
+    top     : 5px;
+    right   : 5px;
+}
+/* #endregion */
+
+/* #region SECTIONS */
+.panelSection > header {
+    display             : flex;
+    align-items         : center;
+    cursor              : pointer;
+    gap                 : 5px;
+    user-select         : none;
+    min-height          : 21px;
+
+    background-color    : rgba(0, 170, 255, 0.15);
+    padding             : 2px 8px;
+    border-radius       : 4px;
+}
+
+.panelSection > main { display:flex; flex-direction:column; }
+
+.panelSection > main > div:nth-child(even) { background-color: #282828; }
+/* #endregion */
+
+/* #region SECTION ROWS */
+.sectionRow{
+    display                 : grid;
+    align-items             : center;
+    min-height              : 32px;
+    grid-template-columns   : .5fr 1fr;
+    padding                 : 1px 4px;
+    border-radius           : 3px;
+
+    & > header {
+        padding-left    : 4px;
+        color           : #808080;
+    }
+}
+/* #endregion */
+
+/* #region RANGE BAR */
+.rngbar{
+    position            : relative;
+    height              : 18px;
+    width               : 100%;
+    box-sizing          : border-box;
+    background-color    :#373748;
+    border-radius       : 4px;
+    &::before, &::after{
+        display         : flex;
+        align-items     : center;
+        position        : absolute;
+        inset           : 0;
+        pointer-events  : none;
+        margin          : 0px 7px 0px 7px;
+    }
+
+    &::before{ content: "-";  }
+    &::after{ content: "+"; justify-content:right; }
+}
+
+.rngbar > span{
+    position        : absolute;
+    inset           : 0;
+    display         : flex;
+    align-items     : center;
+    justify-content : center;
+    pointer-events  : none;
+}
+
+.rngbar > input[type='range']{
+    appearance          : none;
+    background-color    : black;
+    overflow            : hidden;
+    margin              : 0px;
+    position            : absolute;
+    inset               : 0;
+    border-radius       : 4px;
+
+    &[step]{
+      background-color: transparent;
+      background-image: repeating-linear-gradient(to right, transparent, transparent calc(12.5% - 1px), black 12.5%);
+    }
+
+    &::-webkit-slider-thumb{
+      appearance    : none;
+      width         : 0px;
+      box-shadow    : -20rem 0 0 20rem #ffffff33;
+    }
+}
+/* #endregion */
+
+
+/* #region SELECT BOX */
+select{
+    appearance      : base-select;
+    box-sizing      : border-box;
+    border          : 0px solid #e4e4e7;
+    border-radius   : 4px;
+    background-color: #323232;
+    box-shadow      : 0 1px 2px rgba(0, 0, 0, 0.05);
+    width           : 100%;
+
+    & > button {
+        display       : flex;
+        width         : 100%;
+        color         : currentColor;
+        height        : 10px;
+
+        & > svg {
+            margin  : -3px 0 0 auto;
+            width   : 1.2rem;
+            height  : 1.2rem;
+        }
+    }
+
+    &:has(option:is([hidden]):checked) { color: gray; }
+    &:has(option:not([hidden]):checked) { color: #d0d0d0; }
+
+    &::picker-icon { display: none; }
+
+    &::picker(select) {
+        appearance      : base-select;
+        border          : 1px solid #e4e4e7;
+        border-radius   : calc(0.5rem - 2px);
+        box-shadow      : 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+
+        transition          : opacity 225ms ease-in-out, transform 225ms ease-in-out;
+        transform-origin    : top;
+        transform           : translateY(0);
+        opacity             : 1;
+
+        @starting-style {
+            transform   : translateY(-0.25rem) scale(0.95);
+            opacity     : 0;
+        }
+    }
+
+    & option {
+        padding : 0.1rem 0.5rem;
+        outline : none;
+        &::checkmark { display: none; }
+        &:hover,&:focus-visible { background-color: #c0c0c0; }
+    }
+}
+/* #endregion */
